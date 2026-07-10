@@ -1,0 +1,9 @@
+{
+    "running": false,
+    "strategy": "FedAvg",
+    "round": 0,
+    "clients": 0,
+    "started_at": "2026-07-09 20:04:59",
+    "last_update": "2026-07-09 20:22:51",
+    "training_time": 1071.98
+}
