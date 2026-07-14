@@ -1,84 +1,149 @@
 from pathlib import Path
+import json
 import requests
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from config import (
+    PROMETHEUS_HOST,
+    PROMETHEUS_PORT,
+    METRICS_FILE,
+    PREDICTIONS_FILE,
+    MODELS_DIR,
+    FLOWER_STATUS_FILE,
+)
 
-DATA_DIR = BASE_DIR / "data"
-MODEL_DIR = BASE_DIR / "models"
-
-PROMETHEUS_URL = "http://localhost:9090/-/healthy"
-
-
-# ==========================================
-# PROMETHEUS
-# ==========================================
-
-def prometheus_online():
-
-    try:
-        requests.get(PROMETHEUS_URL, timeout=2)
-        return True
-    except:
-        return False
-
-
-# ==========================================
-# MODELOS TREINADOS
-# ==========================================
-
-def modelos_treinados():
-
-    modelos = [
-        "memory.joblib",
-        "cpu.joblib",
-        "network_receive.joblib",
-        "network_transmit.joblib"
-    ]
-
-    for modelo in modelos:
-
-        if not (MODEL_DIR / modelo).exists():
-            return False
-
-    return True
-
-
-# ==========================================
-# PREDICTIONS
-# ==========================================
-
-def predictions_ok():
-
-    arquivo = DATA_DIR / "predictions.csv"
-
-    return arquivo.exists()
-
-
-# ==========================================
-# METRICS
-# ==========================================
-
-def metrics_ok():
-
-    arquivo = DATA_DIR / "metrics.csv"
-
-    return arquivo.exists()
-
-
-# ==========================================
+# =====================================================
 # STATUS GERAL
-# ==========================================
+# =====================================================
 
 def get_status():
 
+    status = {}
+
+    # Prometheus
+    try:
+
+        response = requests.get(
+            f"http://{PROMETHEUS_HOST}:{PROMETHEUS_PORT}",
+            timeout=2
+        )
+
+        status["Prometheus"] = (
+            response.status_code == 200
+        )
+
+    except Exception:
+
+        status["Prometheus"] = False
+
+    # Arquivo de métricas
+
+    status["Metrics"] = (
+        Path(METRICS_FILE).exists()
+    )
+
+    # Modelos treinados
+
+    modelos = [
+
+        MODELS_DIR / "memory.joblib",
+
+        MODELS_DIR / "cpu.joblib",
+
+        MODELS_DIR / "network_receive.joblib",
+
+        MODELS_DIR / "network_transmit.joblib"
+
+    ]
+
+    status["Models"] = all(
+        arquivo.exists()
+        for arquivo in modelos
+    )
+
+    # Previsões
+
+    status["Predictions"] = (
+        Path(PREDICTIONS_FILE).exists()
+    )
+
+    return status
+
+
+# =====================================================
+# STATUS FLOWER
+# =====================================================
+
+def get_flower_status():
+
+    if Path(FLOWER_STATUS_FILE).exists():
+
+        try:
+
+            with open(
+                FLOWER_STATUS_FILE,
+                "r",
+                encoding="utf-8"
+            ) as f:
+
+                dados = json.load(f)
+
+            return {
+
+                "running": dados.get(
+                    "running",
+                    False
+                ),
+
+                "strategy": dados.get(
+                    "strategy",
+                    "-"
+                ),
+
+                "round": dados.get(
+                    "round",
+                    0
+                ),
+
+                "clients": dados.get(
+                    "clients",
+                    0
+                ),
+
+                "started_at": dados.get(
+                    "started_at",
+                    "-"
+                ),
+
+                "last_update": dados.get(
+                    "last_update",
+                    "-"
+                ),
+
+                "training_time": dados.get(
+                    "training_time",
+                    0
+                )
+
+            }
+
+        except Exception:
+
+            pass
+
     return {
 
-        "Prometheus": prometheus_online(),
+        "running": False,
 
-        "Metrics": metrics_ok(),
+        "strategy": "-",
 
-        "Predictions": predictions_ok(),
+        "round": 0,
 
-        "Models": modelos_treinados()
+        "clients": 0,
+
+        "started_at": "-",
+
+        "last_update": "-",
+
+        "training_time": 0
 
     }

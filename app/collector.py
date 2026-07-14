@@ -40,14 +40,11 @@ if not Path(METRICS_FILE).exists():
 # =====================================================
 
 def consultar(query: str) -> float:
-
     try:
 
         response = requests.get(
             PROMETHEUS_URL,
-            params={
-                "query": query
-            },
+            params={"query": query},
             timeout=5
         )
 
@@ -90,10 +87,11 @@ NETWORK_TRANSMIT_QUERY = (
 # =====================================================
 
 print("=" * 70)
-print("FEDERATED MONITORING")
+print("        FEDERATED MONITORING - COLLECTOR")
 print("=" * 70)
-print(f"Arquivo : {METRICS_FILE}")
-print(f"Intervalo : {UPDATE_TIME} segundos")
+print(f"Arquivo........: {METRICS_FILE}")
+print(f"Prometheus.....: {PROMETHEUS_URL}")
+print(f"Intervalo......: {UPDATE_TIME} segundos")
 print("Pressione CTRL+C para encerrar.")
 print("=" * 70)
 
@@ -115,12 +113,12 @@ try:
             NETWORK_TRANSMIT_QUERY
         )
 
+        horario = datetime.now()
+
         linha = pd.DataFrame([{
 
             "timestamp":
-                datetime.now().strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
+                horario.strftime("%Y-%m-%d %H:%M:%S"),
 
             "memory":
                 memoria,
@@ -137,36 +135,39 @@ try:
         }])
 
         linha.to_csv(
-
             METRICS_FILE,
-
             mode="a",
-
             header=False,
-
             index=False
-
         )
 
         print(
-
             f"[{coleta:05}] "
-
-            f"RAM: {memoria/1024/1024:.2f} MB | "
-
-            f"CPU: {cpu:.6f} | "
-
-            f"DOWN: {download/1024/1024:.2f} MB | "
-
-            f"UP: {upload/1024/1024:.2f} MB"
-
+            f"{horario.strftime('%H:%M:%S')} | "
+            f"RAM: {memoria/1024/1024:8.2f} MB | "
+            f"CPU: {cpu:10.6f} | "
+            f"DOWN: {download/1024/1024:10.2f} MB | "
+            f"UP: {upload/1024/1024:10.2f} MB"
         )
 
         coleta += 1
 
-        time.sleep(
-            UPDATE_TIME
-        )
+        # Resumo a cada 10 coletas
+        if coleta % 10 == 0:
+
+            print("\n" + "=" * 70)
+
+            print("RESUMO DA COLETA")
+
+            print(f"Coletas realizadas : {coleta}")
+
+            print(f"Última atualização : {horario.strftime('%d/%m/%Y %H:%M:%S')}")
+
+            print(f"Arquivo            : {METRICS_FILE}")
+
+            print("=" * 70 + "\n")
+
+        time.sleep(UPDATE_TIME)
 
 except KeyboardInterrupt:
 
@@ -174,6 +175,8 @@ except KeyboardInterrupt:
 
     print("=" * 70)
 
-    print("Coleta encerrada.")
+    print("Coleta encerrada pelo usuário.")
+
+    print(f"Total de coletas realizadas: {coleta}")
 
     print("=" * 70)

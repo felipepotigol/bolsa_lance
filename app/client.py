@@ -1,55 +1,115 @@
 import flwr as fl
-import pandas as pd
-import numpy as np
 import joblib
+import numpy as np
+import pandas as pd
+
 from pathlib import Path
 from sklearn.linear_model import LinearRegression
 
-# ==========================================
-# CONFIGURAÇÕES
-# ==========================================
+from config import (
+    METRICS_FILE,
+    MODELS_DIR,
+    SERVER_ADDRESS,
+)
 
-DATA_FILE = Path("data") / "metrics.csv"
-MODEL_DIR = Path("models")
+# =====================================================
+# VERIFICAÇÕES
+# =====================================================
 
-MODEL_DIR.mkdir(exist_ok=True)
+if not METRICS_FILE.exists():
 
-TARGETS = [
-    "memory",
-    "cpu",
-    "network_receive",
-    "network_transmit"
-]
+    raise FileNotFoundError(
+        f"Arquivo não encontrado:\n{METRICS_FILE}"
+    )
 
-# ==========================================
+MODELS_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+# =====================================================
 # LEITURA DOS DADOS
-# ==========================================
+# =====================================================
 
-df = pd.read_csv(DATA_FILE)
+df = pd.read_csv(METRICS_FILE)
+
+df = df.dropna()
 
 if len(df) < 10:
-    raise Exception("Poucos dados para treinamento.")
 
-X = np.arange(len(df)).reshape(-1, 1)
+    raise Exception(
+        "Poucos dados para treinamento."
+    )
+
+# =====================================================
+# PREPARAÇÃO
+# =====================================================
+
+TARGETS = [
+
+    "memory",
+
+    "cpu",
+
+    "network_receive",
+
+    "network_transmit"
+
+]
+
+X = np.arange(
+    len(df)
+).reshape(-1, 1)
 
 models = {}
+
+# =====================================================
+# TREINAMENTO LOCAL
+# =====================================================
+
+print("=" * 60)
+print("TREINAMENTO LOCAL")
+print("=" * 60)
 
 for coluna in TARGETS:
 
     y = df[coluna].values
 
-    model = LinearRegression()
-    model.fit(X, y)
+    modelo = LinearRegression()
 
-    models[coluna] = model
+    modelo.fit(
+        X,
+        y
+    )
 
-    print(f"\nModelo treinado: {coluna}")
-    print("Coef:", model.coef_[0])
-    print("Intercepto:", model.intercept_)
+    models[coluna] = modelo
 
-# ==========================================
+    joblib.dump(
+
+        modelo,
+
+        MODELS_DIR / f"{coluna}.joblib"
+
+    )
+
+    print()
+
+    print(f"Modelo: {coluna}")
+
+    print(f"Coeficiente : {modelo.coef_[0]}")
+
+    print(f"Intercepto  : {modelo.intercept_}")
+
+print()
+
+print("=" * 60)
+print("Modelos locais treinados.")
+print("=" * 60)
+
+# =====================================================
 # CLIENTE FLOWER
-# ==========================================
+# =====================================================
+
 
 class FederatedClient(fl.client.NumPyClient):
 
@@ -59,33 +119,49 @@ class FederatedClient(fl.client.NumPyClient):
 
         for coluna in TARGETS:
 
-            model = models[coluna]
+            modelo = models[coluna]
 
-            parametros.append(model.coef_)
-            parametros.append(np.array([model.intercept_]))
+            parametros.append(
+                modelo.coef_
+            )
+
+            parametros.append(
+                np.array(
+                    [modelo.intercept_]
+                )
+            )
 
         return parametros
 
     def fit(self, parameters, config):
 
-        print("\nRecebendo parâmetros do servidor...")
+        print()
+
+        print("Recebendo parâmetros do servidor...")
 
         indice = 0
 
         for coluna in TARGETS:
 
-            model = models[coluna]
+            modelo = models[coluna]
 
-            model.coef_ = parameters[indice]
-            model.intercept_ = parameters[indice + 1][0]
+            modelo.coef_ = parameters[indice]
+
+            modelo.intercept_ = parameters[indice + 1][0]
 
             indice += 2
 
-            model.fit(X, df[coluna].values)
+            modelo.fit(
+                X,
+                df[coluna].values
+            )
 
             joblib.dump(
-                model,
-                MODEL_DIR / f"{coluna}.joblib"
+
+                modelo,
+
+                MODELS_DIR / f"{coluna}.joblib"
+
             )
 
             print(f"Modelo atualizado: {coluna}")
@@ -94,42 +170,63 @@ class FederatedClient(fl.client.NumPyClient):
 
         for coluna in TARGETS:
 
-            model = models[coluna]
+            modelo = models[coluna]
 
-            parametros.append(model.coef_)
-            parametros.append(np.array([model.intercept_]))
+            parametros.append(
+                modelo.coef_
+            )
+
+            parametros.append(
+                np.array(
+                    [modelo.intercept_]
+                )
+            )
 
         return parametros, len(X), {}
 
     def evaluate(self, parameters, config):
 
-        mse_total = []
+        erros = []
 
         for coluna in TARGETS:
 
             pred = models[coluna].predict(X)
 
             mse = np.mean(
+
                 (pred - df[coluna].values) ** 2
+
             )
 
-            mse_total.append(mse)
+            erros.append(mse)
 
-        loss = float(np.mean(mse_total))
+        loss = float(
+
+            np.mean(erros)
+
+        )
+
+        print()
 
         print(f"Loss médio: {loss}")
 
         return loss, len(X), {}
 
-# ==========================================
+
+# =====================================================
 # EXECUÇÃO
-# ==========================================
+# =====================================================
+
+print()
 
 print("=" * 60)
 print("CLIENTE FLOWER")
 print("=" * 60)
 
-fl.client.start_numpy_client(
-    server_address="127.0.0.1:8081",
-    client=FederatedClient()
+fl.client.start_client(
+
+    server_address=SERVER_ADDRESS,
+
+    client=FederatedClient().to_client()
+
 )
