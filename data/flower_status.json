@@ -2,7 +2,7 @@
     "running": true,
     "strategy": "FedAvg",
     "rounds": 10,
-    "started_at": "2026-07-18 02:42:16",
+    "started_at": "2026-07-18 01:59:53",
     "finished_at": null,
     "training_time": 0
 }
